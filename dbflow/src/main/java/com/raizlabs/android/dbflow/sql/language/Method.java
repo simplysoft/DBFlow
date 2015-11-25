@@ -1,5 +1,7 @@
 package com.raizlabs.android.dbflow.sql.language;
 
+import android.support.annotation.NonNull;
+
 import com.raizlabs.android.dbflow.sql.QueryBuilder;
 import com.raizlabs.android.dbflow.sql.language.property.IProperty;
 import com.raizlabs.android.dbflow.sql.language.property.Property;
@@ -81,6 +83,21 @@ public class Method extends Property {
         if (propertyList.isEmpty()) {
             propertyList.add(Property.ALL_PROPERTY);
         }
+    }
+
+    /**
+     * Allows adding a property to the {@link Method}. Will remove the {@link Property#ALL_PROPERTY}
+     * if it exists as first item.
+     *
+     * @param property The property to add.
+     */
+    protected void addProperty(@NonNull IProperty property) {
+        propertyList.add(property);
+    }
+
+    @NonNull
+    protected List<IProperty> getPropertyList() {
+        return propertyList;
     }
 
     @Override

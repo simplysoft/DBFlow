@@ -56,12 +56,16 @@ public class SqlUtils {
         BaseDatabaseDefinition flowManager = FlowManager.getDatabaseForTable(modelClass);
         Cursor cursor = flowManager.getWritableDatabase().rawQuery(sql, args);
         List<ModelClass> list = null;
-        if (BaseCacheableModel.class.isAssignableFrom(modelClass)) {
-            list = (List<ModelClass>) convertToCacheableList((Class<? extends BaseCacheableModel>) modelClass, cursor);
-        } else {
-            list = convertToList(modelClass, cursor);
+        try {
+            if (BaseCacheableModel.class.isAssignableFrom(modelClass)) {
+                list = (List<ModelClass>) convertToCacheableList((Class<? extends BaseCacheableModel>) modelClass, cursor);
+            } else {
+                list = convertToList(modelClass, cursor);
+            }
+        } finally {
+            cursor.close();
         }
-        cursor.close();
+
         return list;
     }
 
@@ -249,13 +253,16 @@ public class SqlUtils {
                                                                     String... args) {
         Cursor cursor = FlowManager.getDatabaseForTable(modelClass).getWritableDatabase().rawQuery(sql, args);
         ModelClass retModel = null;
-        if (BaseCacheableModel.class.isAssignableFrom(modelClass)) {
-            retModel = (ModelClass) convertToCacheableModel(false, (Class<? extends BaseCacheableModel>) modelClass,
-                    cursor);
-        } else {
-            retModel = convertToModel(false, modelClass, cursor);
+        try {
+            if (BaseCacheableModel.class.isAssignableFrom(modelClass)) {
+                retModel = (ModelClass) convertToCacheableModel(false, (Class<? extends BaseCacheableModel>) modelClass,
+                        cursor);
+            } else {
+                retModel = convertToModel(false, modelClass, cursor);
+            }
+        } finally {
+            cursor.close();
         }
-        cursor.close();
         return retModel;
     }
 
@@ -304,7 +311,9 @@ public class SqlUtils {
     }
 
     /**
-     * Updates the model if it exists. If the model does not exist and no rows are changed, we will attempt an insert into the DB.
+     * Updates the model if it exists. Returns false if fails. NOTE: this no longer will attempt to
+     * insert {@link Model} in the database. If you need to do either update or insert, call {@link #save(Model, RetrievalAdapter, ModelAdapter)}
+     * or more  simply {@link Model#save()}
      *
      * @param model        The model to update
      * @param modelAdapter The adapter to use

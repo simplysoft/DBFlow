@@ -60,6 +60,7 @@ All standard tables must use the `@Table` annotation and implement `Model`. As a
 4. Nested `Model` defined as a `@ForeignKey`, enabling 1-1 relationships.
 5. Any `ModelContainer` as a `@ForeignKey`
 6. Composite `@ForeignKey`
+7. Custom `TypeConverter` via `@Column(typeConverter = SomeTypeConverter.class)`
 
 **Restrictions & Limitations**:
 1. All `Model` **MUST HAVE** an accessible default constructor. We will use the default constructor when querying the database.
@@ -67,7 +68,7 @@ All standard tables must use the `@Table` annotation and implement `Model`. As a
 3. Column names default to the field name as a convenience, but if the name of your fields change you will need to specify the column name.
 4. All fields must be `public` or package private as the `$Adapter` class needs access to them,
 5. or private ONLY when you specify `get{Name}()` and `set{Name}(columnType)` methods for a column named `{name}`. This can be configured.
-6. All model class definitions must be top-level (in their own file) and `public` or package private.
+6. All model class definitions must be top-level (in their own file) and `public`.
 
 ### Sample Model
 This is an example of a `Model` class with a primary key (at least one is required) and another field.
@@ -89,6 +90,17 @@ public class TestModel extends BaseModel {
 ```
 
 ## Advanced Table Features
+### Custom Type Converter for a specific Column Only
+As of 3.0, you can now specify a `TypeConverter` for a specific `@Column` to provide a one-time or more-specific need on a case-by-case basis. To define a `TypeConverter` for a `Column` :
+
+```java
+
+@Column(typeConverter = SomeTypeConverter.class)
+SomeObject someObject;
+```
+
+It will override the usual conversion/access methods (EXCEPT for if the field is private, it retains the private-based access methods).
+
 ### All Fields as Columns
 As other libraries do, you can set `@Table(allFields = true)` to turn on the ability to use all public/package private, non-final, and non-static fields as `@Column`. You still are required to provide a primary key `@Column` field.
 

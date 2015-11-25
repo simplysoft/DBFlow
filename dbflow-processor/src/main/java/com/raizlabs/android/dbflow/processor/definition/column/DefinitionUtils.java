@@ -1,5 +1,6 @@
 package com.raizlabs.android.dbflow.processor.definition.column;
 
+import com.raizlabs.android.dbflow.data.Blob;
 import com.raizlabs.android.dbflow.processor.SQLiteHelper;
 import com.raizlabs.android.dbflow.processor.definition.method.BindToContentValuesMethod;
 import com.raizlabs.android.dbflow.processor.definition.method.BindToStatementMethod;
@@ -27,38 +28,53 @@ public class DefinitionUtils {
         CodeBlock.Builder codeBuilder = CodeBlock.builder();
 
         String finalAccessStatement = statement;
-        if (columnAccess instanceof TypeConverterAccess ||
-                isModelContainerAdapter) {
+        boolean isBlobRaw = false;
+
+        TypeName finalTypeName = elementTypeName;
+        if (columnAccess instanceof WrapperColumnAccess
+                || isModelContainerAdapter) {
             finalAccessStatement = (isModelContainerAdapter ? (variableNameString + elementName) : ("ref" + fullElementName));
 
-            TypeName typeName;
             if (columnAccess instanceof TypeConverterAccess) {
-                typeName = ((TypeConverterAccess) columnAccess).typeConverterDefinition.getDbTypeName();
-            } else if (columnAccess instanceof EnumColumnAccess) {
-                typeName = ClassName.get(String.class);
-            } else if (columnAccess instanceof BlobColumnAccess) {
-                typeName = ArrayTypeName.of(TypeName.BYTE);
+                finalTypeName = ((TypeConverterAccess) columnAccess).typeConverterDefinition.getDbTypeName();
+                isBlobRaw = (finalTypeName.equals(ClassName.get(Blob.class)));
             } else {
-                typeName = elementTypeName;
+                if (columnAccess instanceof EnumColumnAccess) {
+                    finalTypeName = ClassName.get(String.class);
+                } else if (columnAccess instanceof BlobColumnAccess) {
+                    finalTypeName = ArrayTypeName.of(TypeName.BYTE);
+                } else {
+                    finalTypeName = elementTypeName;
+                }
             }
 
-            codeBuilder.addStatement("$T $L = $L", typeName,
-                    finalAccessStatement, statement);
+            if (!isModelContainerAdapter && !elementTypeName.isPrimitive()) {
+                String shortAccess = ((WrapperColumnAccess) columnAccess).existingColumnAccess.getShortAccessString(elementTypeName, elementName, isModelContainerAdapter);
+                codeBuilder.addStatement("$T $L = model.$L != null ? $L : null", finalTypeName,
+                        finalAccessStatement, shortAccess, statement);
+            } else {
+                codeBuilder.addStatement("$T $L = $L", finalTypeName,
+                        finalAccessStatement, statement);
+            }
         }
 
-        if (!elementTypeName.isPrimitive()) {
-            if(!isModelContainerAdapter && (columnAccess instanceof EnumColumnAccess || columnAccess instanceof BlobColumnAccess)) {
+        String putAccess = finalAccessStatement;
+        if (isBlobRaw) {
+            putAccess = finalAccessStatement + ".getBlob()";
+        }
+        if (!finalTypeName.isPrimitive()) {
+            if (!isModelContainerAdapter && (columnAccess instanceof EnumColumnAccess || columnAccess instanceof BlobColumnAccess)) {
                 codeBuilder.beginControlFlow("if (($L != null) && ($L != null))", variableNameString + "." + elementName, finalAccessStatement);
             } else {
-                codeBuilder.beginControlFlow("if ($L != null)", finalAccessStatement);
+                codeBuilder.beginControlFlow("if ($L != null)", putAccess);
             }
         }
 
         codeBuilder.addStatement("$L.put($S, $L)",
                 BindToContentValuesMethod.PARAM_CONTENT_VALUES,
-                QueryBuilder.quote(columnName), finalAccessStatement);
+                QueryBuilder.quote(columnName), putAccess);
 
-        if (!elementTypeName.isPrimitive()) {
+        if (!finalTypeName.isPrimitive()) {
             codeBuilder.nextControlFlow("else")
                     .addStatement("$L.putNull($S)", BindToContentValuesMethod.PARAM_CONTENT_VALUES, QueryBuilder.quote(columnName))
                     .endControlFlow();
@@ -75,37 +91,54 @@ public class DefinitionUtils {
         CodeBlock.Builder codeBuilder = CodeBlock.builder();
 
         String finalAccessStatement = statement;
-        if (columnAccess instanceof TypeConverterAccess
+        boolean isBlobRaw = false;
+
+        TypeName finalTypeName = elementTypeName;
+        if (columnAccess instanceof WrapperColumnAccess
                 || isModelContainerAdapter) {
             finalAccessStatement = (isModelContainerAdapter ? (variableNameString + elementName) : ("ref" + fullElementName));
 
-            TypeName typeName;
             if (columnAccess instanceof TypeConverterAccess) {
-                typeName = ((TypeConverterAccess) columnAccess).typeConverterDefinition.getDbTypeName();
-            } else if (columnAccess instanceof EnumColumnAccess) {
-                typeName = ClassName.get(String.class);
-            } else if (columnAccess instanceof BlobColumnAccess) {
-                typeName = ArrayTypeName.of(TypeName.BYTE);
+                finalTypeName = ((TypeConverterAccess) columnAccess).typeConverterDefinition.getDbTypeName();
+                isBlobRaw = (finalTypeName.equals(ClassName.get(Blob.class)));
             } else {
-                typeName = elementTypeName;
+                if (columnAccess instanceof EnumColumnAccess) {
+                    finalTypeName = ClassName.get(String.class);
+                } else if (columnAccess instanceof BlobColumnAccess) {
+                    finalTypeName = ArrayTypeName.of(TypeName.BYTE);
+                } else {
+                    finalTypeName = elementTypeName;
+                }
             }
 
-            codeBuilder.addStatement("$T $L = $L", typeName,
-                    finalAccessStatement, statement);
+            if (!isModelContainerAdapter && !elementTypeName.isPrimitive()) {
+                String shortAccess = ((WrapperColumnAccess) columnAccess).existingColumnAccess.getShortAccessString(elementTypeName, elementName, isModelContainerAdapter);
+                codeBuilder.addStatement("$T $L = model.$L != null ? $L : null", finalTypeName,
+                        finalAccessStatement, shortAccess, statement);
+            } else {
+                codeBuilder.addStatement("$T $L = $L", finalTypeName,
+                        finalAccessStatement, statement);
+            }
         }
 
-        if (!elementTypeName.isPrimitive()) {
-            if(!isModelContainerAdapter && (columnAccess instanceof EnumColumnAccess || columnAccess instanceof BlobColumnAccess)) {
-                codeBuilder.beginControlFlow("if (($L != null) && ($L != null))", variableNameString + "." + elementName, finalAccessStatement);
+        String putAccess = finalAccessStatement;
+        if (isBlobRaw) {
+            putAccess = finalAccessStatement + ".getBlob()";
+        }
+        if (!finalTypeName.isPrimitive()) {
+            if (!isModelContainerAdapter && (columnAccess instanceof EnumColumnAccess
+                    || columnAccess instanceof BlobColumnAccess
+                    || isBlobRaw)) {
+                codeBuilder.beginControlFlow("if (($L != null) && ($L != null))", variableNameString + "." + elementName, putAccess);
             } else {
-                codeBuilder.beginControlFlow("if ($L != null)", finalAccessStatement);
+                codeBuilder.beginControlFlow("if ($L != null)", putAccess);
             }
         }
         codeBuilder.addStatement("$L.bind$L($L, $L)",
                 BindToStatementMethod.PARAM_STATEMENT,
                 columnAccess.getSqliteTypeForTypeName(elementTypeName, isModelContainerAdapter).getSQLiteStatementMethod(),
-                index.intValue(), finalAccessStatement);
-        if (!elementTypeName.isPrimitive()) {
+                index.intValue(), putAccess);
+        if (!finalTypeName.isPrimitive()) {
             codeBuilder.nextControlFlow("else")
                     .addStatement("$L.bindNull($L)", BindToStatementMethod.PARAM_STATEMENT, index.intValue())
                     .endControlFlow();

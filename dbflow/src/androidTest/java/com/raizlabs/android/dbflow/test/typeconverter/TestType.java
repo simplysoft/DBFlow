@@ -40,4 +40,18 @@ public class TestType extends TestModel1 {
 
     @Column(typeConverter = CustomBooleanConverter.class)
     Boolean thisHasCustom;
+
+    @Column(typeConverter = EnumOverriderConverter.class)
+    private EnumOverriderConverter.TestEnum testEnum;
+
+    @Column
+    Blobable blobable;
+
+    public EnumOverriderConverter.TestEnum getTestEnum() {
+        return testEnum;
+    }
+
+    public void setTestEnum(EnumOverriderConverter.TestEnum testEnum) {
+        this.testEnum = testEnum;
+    }
 }
