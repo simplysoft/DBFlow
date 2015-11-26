@@ -52,9 +52,10 @@ public class ColumnDefinition extends BaseDefinition {
     public String containerKeyName;
     public boolean putContainerDefaultValue;
 
-    public boolean hasTypeConverter = false;
-    public boolean isPrimaryKey = false;
-    public boolean isPrimaryKeyAutoIncrement = false;
+    public boolean hasTypeConverter;
+    public boolean isPrimaryKey;
+    public boolean isPrimaryKeyAutoIncrement;
+    public boolean isQuickCheckPrimaryKeyAutoIncrement;
 
     public Column column;
     public int length = -1;
@@ -103,6 +104,7 @@ public class ColumnDefinition extends BaseDefinition {
         if (primaryKey != null) {
             if (primaryKey.autoincrement()) {
                 isPrimaryKeyAutoIncrement = true;
+                isQuickCheckPrimaryKeyAutoIncrement = primaryKey.quickCheckAutoIncrement();
             } else {
                 isPrimaryKey = true;
             }
@@ -186,9 +188,12 @@ public class ColumnDefinition extends BaseDefinition {
                     processorManager.getMessager()
                             .printMessage(Diagnostic.Kind.ERROR, "Columns cannot be of array type.");
                 } else {
-                    if (elementTypeName.box().equals(TypeName.BOOLEAN.box())) {
+                    if (elementTypeName.equals(TypeName.BOOLEAN.box())) {
                         isBoolean = true;
                         columnAccess = new BooleanColumnAccess(manager, this);
+                    } else if (elementTypeName.equals(TypeName.BOOLEAN)) {
+                        // lower case boolean, we don't box up and down, we just check true or false.
+                        columnAccess = new BooleanTypeColumnAccess(this);
                     } else {
                         // Any annotated members, otherwise we will use the scanner to find other ones
                         final TypeConverterDefinition typeConverterDefinition = processorManager.getTypeConverterDefinition(elementTypeName);
@@ -249,7 +254,7 @@ public class ColumnDefinition extends BaseDefinition {
 
     public CodeBlock getSQLiteStatementMethod(AtomicInteger index, boolean isModelContainerAdapter) {
         return DefinitionUtils.getSQLiteStatementMethod(index, containerKeyName, elementName,
-                elementTypeName, isModelContainerAdapter, columnAccess, ModelUtils.getVariable(isModelContainerAdapter)).build();
+                elementTypeName, isModelContainerAdapter, columnAccess, ModelUtils.getVariable(isModelContainerAdapter), isPrimaryKeyAutoIncrement).build();
     }
 
     public CodeBlock getLoadFromCursorMethod(boolean isModelContainerAdapter, boolean putNullForContainerAdapter) {
@@ -299,12 +304,12 @@ public class ColumnDefinition extends BaseDefinition {
         }
         return CodeBlock.builder()
                 .addStatement(columnAccessToUse.setColumnAccessString(elementTypeName, containerKeyName, elementName,
-                        false, ModelUtils.getVariable(false), codeBuilder.build()))
+                        false, ModelUtils.getVariable(false), codeBuilder.build(), true))
                 .build();
     }
 
-    public String getColumnAccessString(boolean isModelContainerAdapter) {
-        return columnAccess.getColumnAccessString(elementTypeName, containerKeyName, elementName, ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter);
+    public String getColumnAccessString(boolean isModelContainerAdapter, boolean isSqliteStatment) {
+        return columnAccess.getColumnAccessString(elementTypeName, containerKeyName, elementName, ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter, isSqliteStatment);
     }
 
     /**
@@ -317,7 +322,7 @@ public class ColumnDefinition extends BaseDefinition {
             TypeConverterDefinition converterDefinition = converterAccess.typeConverterDefinition;
             if (!isModelContainerAdapter) {
                 return converterAccess.existingColumnAccess.getColumnAccessString(converterDefinition.getDbTypeName(), containerKeyName, elementName,
-                        ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter);
+                        ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter, false);
             } else {
                 return CodeBlock.builder()
                         .add("$L.getTypeConvertedPropertyValue($T.class, $S)",
@@ -328,7 +333,7 @@ public class ColumnDefinition extends BaseDefinition {
             }
         } else {
             return columnAccess.getColumnAccessString(elementTypeName, containerKeyName, elementName,
-                    ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter);
+                    ModelUtils.getVariable(isModelContainerAdapter), isModelContainerAdapter, false);
         }
     }
 
@@ -363,7 +368,7 @@ public class ColumnDefinition extends BaseDefinition {
         CodeBlock.Builder codeBuilder = CodeBlock.builder();
         codeBuilder.addStatement("$L.put($T.$L, $L)", ModelUtils.getVariable(true), tableClassName, columnName,
                 columnAccess.getColumnAccessString(elementTypeName, containerKeyName, elementName,
-                        ModelUtils.getVariable(false), false));
+                        ModelUtils.getVariable(false), false, false));
         return codeBuilder.build();
     }
 }

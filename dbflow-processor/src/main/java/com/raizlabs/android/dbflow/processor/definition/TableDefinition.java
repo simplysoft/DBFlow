@@ -235,6 +235,16 @@ public class TableDefinition extends BaseTableDefinition {
     }
 
     @Override
+    public boolean hasAutoIncrement() {
+        return hasAutoIncrement;
+    }
+
+    @Override
+    public ColumnDefinition getAutoIncrementColumn() {
+        return autoIncrementDefinition;
+    }
+
+    @Override
     protected void createColumnDefinitions(TypeElement typeElement) {
         List<? extends Element> elements = manager.getElements().getAllMembers(typeElement);
         ColumnValidator columnValidator = new ColumnValidator();
@@ -354,7 +364,7 @@ public class TableDefinition extends BaseTableDefinition {
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                     .addParameter(elementClassName, ModelUtils.getVariable(false))
-                    .addStatement("return $L", autoIncrementDefinition.getColumnAccessString(false))
+                    .addStatement("return $L", autoIncrementDefinition.getColumnAccessString(false, false))
                     .returns(ClassName.get(Number.class)).build());
 
             typeBuilder.addMethod(MethodSpec.methodBuilder("getAutoIncrementingColumnName")
