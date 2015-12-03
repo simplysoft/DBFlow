@@ -12,7 +12,7 @@ import com.raizlabs.android.dbflow.test.TestDatabase;
 public class TestModel1 extends BaseModel {
     @Column
     @PrimaryKey
-    public String name;
+    String name;
 
     @Override
     public boolean equals(Object o) {
@@ -23,6 +23,14 @@ public class TestModel1 extends BaseModel {
 
         return !(name != null ? !name.equals(that.name) : that.name != null);
 
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override

@@ -28,27 +28,37 @@ public class OneToManySaveMethod implements MethodDefinition {
 
     @Override
     public MethodSpec getMethodSpec() {
-        CodeBlock.Builder code = CodeBlock.builder();
-        for (OneToManyDefinition oneToManyDefinition : tableDefinition.oneToManyDefinitions) {
-            switch (methodName) {
-                case METHOD_SAVE:
-                    oneToManyDefinition.writeSave(code);
-                    break;
-                case METHOD_UPDATE:
-                    oneToManyDefinition.writeUpdate(code);
-                    break;
-                case METHOD_INSERT:
-                    oneToManyDefinition.writeInsert(code);
-                    break;
+        if (!tableDefinition.oneToManyDefinitions.isEmpty() || !isModelContainerAdapter && tableDefinition.cachingEnabled) {
+            CodeBlock.Builder code = CodeBlock.builder();
+            for (OneToManyDefinition oneToManyDefinition : tableDefinition.oneToManyDefinitions) {
+                switch (methodName) {
+                    case METHOD_SAVE:
+                        oneToManyDefinition.writeSave(code);
+                        break;
+                    case METHOD_UPDATE:
+                        oneToManyDefinition.writeUpdate(code);
+                        break;
+                    case METHOD_INSERT:
+                        oneToManyDefinition.writeInsert(code);
+                        break;
+                }
             }
-        }
-        code.addStatement("super.$L($L)", methodName, ModelUtils.getVariable(isModelContainerAdapter));
 
-        return MethodSpec.methodBuilder(methodName)
-                .addAnnotation(Override.class)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addParameter(tableDefinition.elementClassName, ModelUtils.getVariable(isModelContainerAdapter))
-                .addCode(code.build())
-                .build();
+            code.addStatement("super.$L($L)", methodName, ModelUtils.getVariable(isModelContainerAdapter));
+
+            if (!isModelContainerAdapter && tableDefinition.cachingEnabled) {
+                code.addStatement("getModelCache().addModel(getCachingId($L), $L)", ModelUtils.getVariable(isModelContainerAdapter),
+                        ModelUtils.getVariable(isModelContainerAdapter));
+            }
+
+            return MethodSpec.methodBuilder(methodName)
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                    .addParameter(tableDefinition.elementClassName, ModelUtils.getVariable(isModelContainerAdapter))
+                    .addCode(code.build())
+                    .build();
+        } else {
+            return null;
+        }
     }
 }

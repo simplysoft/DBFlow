@@ -66,7 +66,7 @@ All standard tables must use the `@Table` annotation and implement `Model`. As a
 1. All `Model` **MUST HAVE** an accessible default constructor. We will use the default constructor when querying the database.
 2. Subclassing works as one would expect: the library gathers all inherited fields annotated with `@Column` and count those as rows in the current class's database.
 3. Column names default to the field name as a convenience, but if the name of your fields change you will need to specify the column name.
-4. All fields must be `public` or package private as the `$Adapter` class needs access to them,
+4. All fields must be `public` or package private as the `$Adapter` class needs access to them. _NOTE:_ Package private fields need _not_ be in the same package as DBFlow will generate the necessary access methods to get to them.
 5. or private ONLY when you specify `get{Name}()` and `set{Name}(columnType)` methods for a column named `{name}`. This can be configured.
 6. All model class definitions must be top-level (in their own file) and `public`.
 
@@ -78,7 +78,6 @@ This is an example of a `Model` class with a primary key (at least one is requir
 public class TestModel extends BaseModel {
 
     // All tables must have a least one primary key
-    @Column
     @PrimaryKey
     String name;
 
@@ -102,7 +101,7 @@ SomeObject someObject;
 It will override the usual conversion/access methods (EXCEPT for if the field is private, it retains the private-based access methods).
 
 ### All Fields as Columns
-As other libraries do, you can set `@Table(allFields = true)` to turn on the ability to use all public/package private, non-final, and non-static fields as `@Column`. You still are required to provide a primary key `@Column` field.
+As other libraries do, you can set `@Table(allFields = true)` to turn on the ability to use all public/package private, non-final, and non-static fields as `@Column`. You still are required to provide at least one `@PrimaryKey` field.
 
 ### Private Columns
 If you wish to use private fields, simply specify a getter and setter that follow the format of: `name` -> `getName()` + `setName(columnFieldType)`
@@ -112,7 +111,6 @@ If you wish to use private fields, simply specify a getter and setter that follo
 @Table(database = TestDatabase.class)
 public class PrivateModelTest extends BaseModel {
 
-    @Column
     @PrimaryKey
     private String name;
 
@@ -134,7 +132,6 @@ public class PrivateModelTest extends BaseModel {
 @Table(database = TestDatabase.class, useIsForPrivateBooleans = true)
 public class PrivateModelTest extends BaseModel {
 
-    @Column
     @PrimaryKey
     private String name;
 
@@ -170,7 +167,6 @@ To make use:
                         @UniqueGroup(groupNumber = 2, uniqueConflict = ConflictAction.ROLLBACK))
 public class UniqueModel extends BaseModel {
 
-  @Column
   @PrimaryKey
   @Unique(unique = false, uniqueGroups = {1,2})
   String name;

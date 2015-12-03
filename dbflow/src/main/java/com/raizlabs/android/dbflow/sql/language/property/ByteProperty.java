@@ -70,11 +70,11 @@ public class ByteProperty extends BaseProperty<ByteProperty> {
     }
 
     public Condition like(byte value) {
-        return column(nameAlias).like(value);
+        return column(nameAlias).like(String.valueOf(value));
     }
 
     public Condition glob(byte value) {
-        return column(nameAlias).glob(value);
+        return column(nameAlias).glob(String.valueOf(value));
     }
 
     public Condition greaterThan(byte value) {

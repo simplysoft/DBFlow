@@ -55,8 +55,8 @@ public class ForeignKeyColumnDefinition extends ColumnDefinition {
 
     public boolean saveForeignKeyModel;
 
-    public ForeignKeyColumnDefinition(ProcessorManager manager, TableDefinition tableDefinition, Element typeElement) {
-        super(manager, typeElement, tableDefinition);
+    public ForeignKeyColumnDefinition(ProcessorManager manager, TableDefinition tableDefinition, Element typeElement, boolean isPackagePrivate) {
+        super(manager, typeElement, tableDefinition, isPackagePrivate);
         this.tableDefinition = tableDefinition;
 
         ForeignKey foreignKey = typeElement.getAnnotation(ForeignKey.class);
@@ -249,9 +249,10 @@ public class ForeignKeyColumnDefinition extends ColumnDefinition {
     }
 
     @Override
-    public CodeBlock getLoadFromCursorMethod(boolean isModelContainerAdapter, boolean putNullForContainerAdapter) {
+    public CodeBlock getLoadFromCursorMethod(boolean isModelContainerAdapter, boolean putNullForContainerAdapter,
+                                             boolean endNonPrimitiveIf) {
         if (nonModelColumn) {
-            return super.getLoadFromCursorMethod(isModelContainerAdapter, putNullForContainerAdapter);
+            return super.getLoadFromCursorMethod(isModelContainerAdapter, putNullForContainerAdapter, endNonPrimitiveIf);
         } else {
             checkNeedsReferences();
             CodeBlock.Builder builder = CodeBlock.builder()
@@ -281,10 +282,6 @@ public class ForeignKeyColumnDefinition extends ColumnDefinition {
 
             CodeBlock.Builder initializer = CodeBlock.builder();
 
-            // need to cast to type we're initializing.
-            if (isModelContainer) {
-                initializer.add("($T)", elementTypeName);
-            }
             initializer.add("new $T().from($T.class).where()", ClassNames.SELECT, referencedTableClassName)
                     .add(selectBuilder.build());
             if (!isModelContainerAdapter && !isModelContainer) {
@@ -309,7 +306,9 @@ public class ForeignKeyColumnDefinition extends ColumnDefinition {
                 builder.nextControlFlow("else");
                 builder.addStatement("$L.putDefault($S)", ModelUtils.getVariable(true), columnName);
             }
-            builder.endControlFlow();
+            if (endNonPrimitiveIf) {
+                builder.endControlFlow();
+            }
             return builder.build();
         }
     }
@@ -382,6 +381,11 @@ public class ForeignKeyColumnDefinition extends ColumnDefinition {
 
     public String getRefName() {
         return "ref" + elementName;
+    }
+
+    public List<ForeignKeyReferenceDefinition> getForeignKeyReferenceDefinitionList() {
+        checkNeedsReferences();
+        return foreignKeyReferenceDefinitionList;
     }
 
     /**

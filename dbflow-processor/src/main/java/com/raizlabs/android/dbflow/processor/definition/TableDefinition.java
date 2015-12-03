@@ -4,16 +4,21 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.raizlabs.android.dbflow.annotation.Column;
 import com.raizlabs.android.dbflow.annotation.ConflictAction;
+import com.raizlabs.android.dbflow.annotation.ContainerKey;
 import com.raizlabs.android.dbflow.annotation.ForeignKey;
 import com.raizlabs.android.dbflow.annotation.IndexGroup;
 import com.raizlabs.android.dbflow.annotation.InheritedColumn;
+import com.raizlabs.android.dbflow.annotation.InheritedPrimaryKey;
+import com.raizlabs.android.dbflow.annotation.ModelCacheField;
+import com.raizlabs.android.dbflow.annotation.MultiCacheField;
 import com.raizlabs.android.dbflow.annotation.OneToMany;
+import com.raizlabs.android.dbflow.annotation.PrimaryKey;
 import com.raizlabs.android.dbflow.annotation.Table;
 import com.raizlabs.android.dbflow.annotation.UniqueGroup;
 import com.raizlabs.android.dbflow.processor.ClassNames;
 import com.raizlabs.android.dbflow.processor.ProcessorUtils;
 import com.raizlabs.android.dbflow.processor.definition.column.ColumnDefinition;
-import com.raizlabs.android.dbflow.processor.definition.column.DefinitionUtils;
+import com.raizlabs.android.dbflow.processor.definition.column.ContainerKeyDefinition;
 import com.raizlabs.android.dbflow.processor.definition.column.ForeignKeyColumnDefinition;
 import com.raizlabs.android.dbflow.processor.definition.method.BindToContentValuesMethod;
 import com.raizlabs.android.dbflow.processor.definition.method.BindToStatementMethod;
@@ -27,10 +32,13 @@ import com.raizlabs.android.dbflow.processor.definition.method.OneToManyDeleteMe
 import com.raizlabs.android.dbflow.processor.definition.method.OneToManySaveMethod;
 import com.raizlabs.android.dbflow.processor.definition.method.PrimaryConditionMethod;
 import com.raizlabs.android.dbflow.processor.model.ProcessorManager;
+import com.raizlabs.android.dbflow.processor.utils.ElementUtility;
 import com.raizlabs.android.dbflow.processor.utils.ModelUtils;
+import com.raizlabs.android.dbflow.processor.utils.StringUtils;
 import com.raizlabs.android.dbflow.processor.validator.ColumnValidator;
 import com.raizlabs.android.dbflow.processor.validator.OneToManyValidator;
 import com.raizlabs.android.dbflow.sql.QueryBuilder;
+import com.squareup.javapoet.ArrayTypeName;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.JavaFile;
@@ -38,6 +46,7 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.WildcardTypeName;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -90,18 +99,24 @@ public class TableDefinition extends BaseTableDefinition {
 
     private final MethodDefinition[] methods;
 
-    public boolean hasCachingId = false;
+    public boolean cachingEnabled = false;
+    public int cacheSize;
+    public String customCacheFieldName;
+    public String customMultiCacheFieldName;
 
     public boolean allFields = false;
     public boolean useIsForPrivateBooleans;
 
-    public Map<String, ColumnDefinition> mColumnMap = Maps.newHashMap();
+    public final Map<String, ColumnDefinition> mColumnMap = Maps.newHashMap();
 
     public Map<Integer, List<ColumnDefinition>> columnUniqueMap = Maps.newHashMap();
 
     public List<OneToManyDefinition> oneToManyDefinitions = new ArrayList<>();
+    public List<ContainerKeyDefinition> containerKeyDefinitions = new ArrayList<>();
 
     public Map<String, InheritedColumn> inheritedColumnMap = new HashMap<>();
+    public List<String> inheritedFieldNameList = new ArrayList<>();
+    public Map<String, InheritedPrimaryKey> inheritedPrimaryKeyMap = new HashMap<>();
 
     public TableDefinition(ProcessorManager manager, TypeElement element) {
         super(element, manager);
@@ -120,6 +135,8 @@ public class TableDefinition extends BaseTableDefinition {
                 databaseTypeName = TypeName.get(mte.getTypeMirror());
             }
 
+            cachingEnabled = table.cachingEnabled();
+            cacheSize = table.cacheSize();
             databaseDefinition = manager.getDatabaseWriter(databaseTypeName);
             if (databaseDefinition == null) {
                 manager.logError("Databasewriter was null for : " + tableName);
@@ -156,10 +173,20 @@ public class TableDefinition extends BaseTableDefinition {
 
             InheritedColumn[] inheritedColumns = table.inheritedColumns();
             for (InheritedColumn inheritedColumn : inheritedColumns) {
-                if (inheritedColumnMap.containsKey(inheritedColumn.fieldName())) {
+                if (inheritedFieldNameList.contains(inheritedColumn.fieldName())) {
                     manager.logError("A duplicate inherited column with name %1s was found for %1s", inheritedColumn.fieldName(), tableName);
                 }
+                inheritedFieldNameList.add(inheritedColumn.fieldName());
                 inheritedColumnMap.put(inheritedColumn.fieldName(), inheritedColumn);
+            }
+
+            InheritedPrimaryKey[] inheritedPrimaryKeys = table.inheritedPrimaryKeys();
+            for (InheritedPrimaryKey inheritedColumn : inheritedPrimaryKeys) {
+                if (inheritedFieldNameList.contains(inheritedColumn.fieldName())) {
+                    manager.logError("A duplicate inherited column with name %1s was found for %1s", inheritedColumn.fieldName(), tableName);
+                }
+                inheritedFieldNameList.add(inheritedColumn.fieldName());
+                inheritedPrimaryKeyMap.put(inheritedColumn.fieldName(), inheritedColumn);
             }
 
             createColumnDefinitions(element);
@@ -227,11 +254,6 @@ public class TableDefinition extends BaseTableDefinition {
 
         ;
 
-        // single primary key checking for a long or int valued column
-        if (getPrimaryColumnDefinitions().size() == 1) {
-            hasCachingId = !getPrimaryColumnDefinitions().get(0).hasTypeConverter;
-        }
-
     }
 
     @Override
@@ -246,7 +268,8 @@ public class TableDefinition extends BaseTableDefinition {
 
     @Override
     protected void createColumnDefinitions(TypeElement typeElement) {
-        List<? extends Element> elements = manager.getElements().getAllMembers(typeElement);
+        List<? extends Element> elements = ElementUtility.getAllElements(typeElement, manager);
+
         ColumnValidator columnValidator = new ColumnValidator();
         OneToManyValidator oneToManyValidator = new OneToManyValidator();
         for (Element element : elements) {
@@ -256,23 +279,46 @@ public class TableDefinition extends BaseTableDefinition {
                     !element.getModifiers().contains(Modifier.STATIC) &&
                     !element.getModifiers().contains(Modifier.PRIVATE) &&
                     !element.getModifiers().contains(Modifier.FINAL)));
-            if (element.getAnnotation(Column.class) != null || isValidColumn) {
+
+            // package private, will generate helper
+            boolean isPackagePrivate = ElementUtility.isPackagePrivate(element);
+            boolean isPackagePrivateNotInSamePackage = isPackagePrivate && !ElementUtility.isInSamePackage(manager, element, this.element);
+
+            boolean isForeign = element.getAnnotation(ForeignKey.class) != null;
+            boolean isPrimary = element.getAnnotation(PrimaryKey.class) != null;
+            boolean isInherited = inheritedColumnMap.containsKey(element.getSimpleName().toString());
+            boolean isInheritedPrimaryKey = inheritedPrimaryKeyMap.containsKey(element.getSimpleName().toString());
+            if (element.getAnnotation(Column.class) != null || isForeign || isPrimary
+                    || isValidColumn || isInherited || isInheritedPrimaryKey) {
+
+
                 ColumnDefinition columnDefinition;
-                if (element.getAnnotation(ForeignKey.class) != null) {
-                    columnDefinition = new ForeignKeyColumnDefinition(manager, this, element);
+                if (isInheritedPrimaryKey) {
+                    InheritedPrimaryKey inherited = inheritedPrimaryKeyMap.get(element.getSimpleName().toString());
+                    columnDefinition = new ColumnDefinition(manager, element, this, isPackagePrivateNotInSamePackage,
+                            inherited.column(), inherited.primaryKey());
+                } else if (isInherited) {
+                    InheritedColumn inherited = inheritedColumnMap.get(element.getSimpleName().toString());
+                    columnDefinition = new ColumnDefinition(manager, element, this, isPackagePrivateNotInSamePackage,
+                            inherited.column(), null);
+                } else if (isForeign) {
+                    columnDefinition = new ForeignKeyColumnDefinition(manager, this, element, isPackagePrivateNotInSamePackage);
                 } else {
-                    columnDefinition = new ColumnDefinition(manager, element, this);
+                    columnDefinition = new ColumnDefinition(manager, element, this, isPackagePrivateNotInSamePackage);
                 }
+
                 if (columnValidator.validate(manager, columnDefinition)) {
                     columnDefinitions.add(columnDefinition);
                     mColumnMap.put(columnDefinition.columnName, columnDefinition);
                     if (columnDefinition.isPrimaryKey) {
                         primaryColumnDefinitions.add(columnDefinition);
-                    } else if (columnDefinition instanceof ForeignKeyColumnDefinition) {
-                        foreignKeyDefinitions.add((ForeignKeyColumnDefinition) columnDefinition);
                     } else if (columnDefinition.isPrimaryKeyAutoIncrement) {
                         autoIncrementDefinition = columnDefinition;
                         hasAutoIncrement = true;
+                    }
+
+                    if (columnDefinition instanceof ForeignKeyColumnDefinition) {
+                        foreignKeyDefinitions.add((ForeignKeyColumnDefinition) columnDefinition);
                     }
 
                     if (!columnDefinition.uniqueGroups.isEmpty()) {
@@ -288,14 +334,46 @@ public class TableDefinition extends BaseTableDefinition {
                             }
                         }
                     }
+
+                    if (isPackagePrivate) {
+                        packagePrivateList.add(columnDefinition);
+                    }
                 }
             } else if (element.getAnnotation(OneToMany.class) != null) {
                 OneToManyDefinition oneToManyDefinition = new OneToManyDefinition((ExecutableElement) element, manager);
                 if (oneToManyValidator.validate(manager, oneToManyDefinition)) {
                     oneToManyDefinitions.add(oneToManyDefinition);
                 }
+            } else if (element.getAnnotation(ContainerKey.class) != null) {
+                ContainerKeyDefinition containerKeyDefinition = new ContainerKeyDefinition(element, manager, this, isPackagePrivateNotInSamePackage);
+                containerKeyDefinitions.add(containerKeyDefinition);
+            } else if (element.getAnnotation(ModelCacheField.class) != null) {
+                if (!element.getModifiers().contains(Modifier.PUBLIC)) {
+                    manager.logError("ModelCacheField must be public");
+                }
+                if (!element.getModifiers().contains(Modifier.STATIC)) {
+                    manager.logError("ModelCacheField must be static");
+                }
+                if (!StringUtils.isNullOrEmpty(customCacheFieldName)) {
+                    manager.logError("ModelCacheField can only be declared once");
+                } else {
+                    customCacheFieldName = element.getSimpleName().toString();
+                }
+            } else if (element.getAnnotation(MultiCacheField.class) != null) {
+                if (!element.getModifiers().contains(Modifier.PUBLIC)) {
+                    manager.logError("MultiCacheField must be public");
+                }
+                if (!element.getModifiers().contains(Modifier.STATIC)) {
+                    manager.logError("MultiCacheField must be static");
+                }
+                if (!StringUtils.isNullOrEmpty(customMultiCacheFieldName)) {
+                    manager.logError("MultiCacheField can only be declared once");
+                } else {
+                    customMultiCacheFieldName = element.getSimpleName().toString();
+                }
             }
         }
+
     }
 
     public ColumnDefinition getAutoIncrementPrimaryKey() {
@@ -374,32 +452,80 @@ public class TableDefinition extends BaseTableDefinition {
                     .returns(ClassName.get(String.class)).build());
         }
 
-        if (hasCachingId) {
-            ColumnDefinition cachingColumn = getPrimaryColumnDefinitions().get(0);
+        if (cachingEnabled) {
 
-            typeBuilder.addMethod(MethodSpec.methodBuilder("hasCachingId")
+            typeBuilder.addMethod(MethodSpec.methodBuilder("cachingEnabled")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                     .addStatement("return $L", true)
                     .returns(TypeName.BOOLEAN).build());
 
-            InternalAdapterHelper.writeGetCachingId(typeBuilder, elementClassName, cachingColumn, false);
+            List<ColumnDefinition> primaries = primaryColumnDefinitions;
+            if (primaries == null || primaries.isEmpty()) {
+                primaries = Lists.newArrayList(autoIncrementDefinition);
+            }
+            InternalAdapterHelper.writeGetCachingId(typeBuilder, elementClassName, primaries, false);
 
-            typeBuilder.addMethod(MethodSpec.methodBuilder("getCachingColumnName")
+            MethodSpec.Builder cachingbuilder = MethodSpec.methodBuilder("createCachingColumns")
                     .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                    .addStatement("return $S", QueryBuilder.stripQuotes(cachingColumn.columnName))
-                    .returns(ClassName.get(String.class)).build());
+                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+            String columns = "return new String[]{";
+            for (int i = 0; i < primaries.size(); i++) {
+                ColumnDefinition column = primaries.get(i);
+                if (i > 0) {
+                    columns += ",";
+                }
+                columns += "\"" + QueryBuilder.quoteIfNeeded(column.columnName) + "\"";
+            }
+            columns += "}";
 
-            typeBuilder.addMethod(MethodSpec.methodBuilder("getCachingIdFromCursorIndex")
+            cachingbuilder.addStatement(columns)
+                    .returns(ArrayTypeName.of(ClassName.get(String.class)));
+
+            typeBuilder.addMethod(cachingbuilder.build());
+
+            if (cacheSize != Table.DEFAULT_CACHE_SIZE) {
+                typeBuilder.addMethod(MethodSpec.methodBuilder("getCacheSize")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .addStatement("return $L", cacheSize)
+                        .returns(TypeName.INT).build());
+            }
+
+            if (!StringUtils.isNullOrEmpty(customCacheFieldName)) {
+                typeBuilder.addMethod(MethodSpec.methodBuilder("createModelCache")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .addStatement("return $T.$L", elementClassName, customCacheFieldName)
+                        .returns(ParameterizedTypeName.get(ClassNames.MODEL_CACHE, elementClassName, WildcardTypeName.subtypeOf(Object.class))).build());
+            }
+
+            if (!StringUtils.isNullOrEmpty(customMultiCacheFieldName)) {
+                typeBuilder.addMethod(MethodSpec.methodBuilder("getCacheConverter")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                        .addStatement("return $T.$L", elementClassName, customMultiCacheFieldName)
+                        .returns(ParameterizedTypeName.get(ClassNames.MULTI_KEY_CACHE_CONVERTER, WildcardTypeName.subtypeOf(Object.class))).build());
+            }
+
+            MethodSpec.Builder reloadMethod = MethodSpec.methodBuilder("reloadRelationships")
                     .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                    .addParameter(elementClassName, ModelUtils.getVariable(false))
                     .addParameter(ClassNames.CURSOR, LoadFromCursorMethod.PARAM_CURSOR)
-                    .addParameter(ClassName.INT, "index")
-                    .addStatement("return $L.$L($L)", LoadFromCursorMethod.PARAM_CURSOR,
-                            DefinitionUtils.getLoadFromCursorMethodString(cachingColumn.elementTypeName, cachingColumn.columnAccess),
-                            "index")
-                    .returns(cachingColumn.elementTypeName.box()).build());
+                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+            CodeBlock.Builder loadStatements = CodeBlock.builder();
+            for (ColumnDefinition foreignColumn : foreignKeyDefinitions) {
+                CodeBlock.Builder codeBuilder = foreignColumn.getLoadFromCursorMethod(false, false,
+                        false).toBuilder();
+                if (!foreignColumn.elementTypeName.isPrimitive()) {
+                    codeBuilder.nextControlFlow("else");
+                    codeBuilder.addStatement(foreignColumn.setColumnAccessString(CodeBlock.builder().add("null").build(), false));
+                    codeBuilder.endControlFlow();
+                }
+                loadStatements.add(codeBuilder.build());
+            }
+            reloadMethod.addCode(loadStatements.build());
+            typeBuilder.addMethod(reloadMethod.build());
         }
 
         CustomTypeConverterPropertyMethod customTypeConverterPropertyMethod = new CustomTypeConverterPropertyMethod(this);

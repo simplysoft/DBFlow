@@ -77,6 +77,7 @@ public class ClassNames {
     public static final ClassName SELECT = ClassName.get(LANGUAGE, "Select");
     public static final ClassName UPDATE = ClassName.get(LANGUAGE, "Update");
     public static final ClassName DELETE = ClassName.get(LANGUAGE, "Delete");
+    public static final ClassName METHOD = ClassName.get(LANGUAGE, "Method");
 
     public static final ClassName BASE_CONTENT_PROVIDER = ClassName.get(RUNTIME, "BaseContentProvider");
     public static final ClassName PROPERTY_CONVERTER = ClassName.get(RUNTIME + ".BaseContentProvider", "PropertyConverter");
@@ -84,5 +85,8 @@ public class ClassNames {
     public static final ClassName MODEL_CONTAINER_UTILS = ClassName.get(CONTAINER, "ModelContainerUtils");
     public static final ClassName MODEL_CONTAINER = ClassName.get(CONTAINER, "ModelContainer");
     public static final ClassName MODEL_CONTAINER_ADAPTER = ClassName.get(CONTAINER, "ModelContainerAdapter");
-    public static final ClassName FOREIGN_KEY_CONTAINER = ClassName.get(CONTAINER,  "ForeignKeyContainer");
+    public static final ClassName FOREIGN_KEY_CONTAINER = ClassName.get(CONTAINER, "ForeignKeyContainer");
+    public static final ClassName BASE_MODEL = ClassName.get(STRUCTURE, "BaseModel");
+    public static final ClassName MODEL_CACHE = ClassName.get(STRUCTURE + ".cache", "ModelCache");
+    public static final ClassName MULTI_KEY_CACHE_CONVERTER = ClassName.get(STRUCTURE + ".cache", "IMultiKeyCacheConverter");
 }

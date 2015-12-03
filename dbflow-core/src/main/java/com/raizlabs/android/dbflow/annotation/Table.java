@@ -15,6 +15,8 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface Table {
 
+    int DEFAULT_CACHE_SIZE = 25;
+
     /**
      * @return Specifies a different name for the table than the name of the Model class.
      */
@@ -48,6 +50,17 @@ public @interface Table {
     boolean useIsForPrivateBooleans() default false;
 
     /**
+     * @return If true, caching mechanism is enabled. This works for single primary key tables. For
+     * multi-primary key tables, IMultiKeyCacheModel interface is required to specify the caching key.
+     */
+    boolean cachingEnabled() default false;
+
+    /**
+     * @return The cache size for this Table.
+     */
+    int cacheSize() default 25;
+
+    /**
      * @return Declares a set of UNIQUE columns with the corresponding {@link ConflictAction}. A {@link Column}
      * will point to this group using {@link Unique#uniqueGroups()}
      */
@@ -61,8 +74,14 @@ public @interface Table {
 
     /**
      * @return A set of inherited accessible fields not necessarily defined as columns in the super class of this table.
-     * Each must be accessible via: public, package private, or protected.
+     * Each must be accessible via: public, package private, or protected or getter/setters.
      */
     InheritedColumn[] inheritedColumns() default {};
+
+    /**
+     * @return A set of inherited accessible fields not necessarily defined as columns in the super class of this table.
+     * Each must be accessible via: public, package private, or protected or getter/setters.
+     */
+    InheritedPrimaryKey[] inheritedPrimaryKeys() default {};
 
 }

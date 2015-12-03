@@ -70,11 +70,11 @@ public class IntProperty extends BaseProperty<IntProperty> {
     }
 
     public Condition like(int value) {
-        return column(nameAlias).like(value);
+        return column(nameAlias).like(String.valueOf(value));
     }
 
     public Condition glob(int value) {
-        return column(nameAlias).glob(value);
+        return column(nameAlias).glob(String.valueOf(value));
     }
 
     public Condition greaterThan(int value) {

@@ -1,9 +1,10 @@
 package com.raizlabs.android.dbflow.test.structure.caching;
 
+import com.raizlabs.android.dbflow.config.FlowManager;
 import com.raizlabs.android.dbflow.sql.language.Delete;
 import com.raizlabs.android.dbflow.sql.language.SQLite;
 import com.raizlabs.android.dbflow.sql.language.Select;
-import com.raizlabs.android.dbflow.structure.cache.BaseCacheableModel;
+import com.raizlabs.android.dbflow.structure.ModelAdapter;
 import com.raizlabs.android.dbflow.structure.cache.ModelCache;
 import com.raizlabs.android.dbflow.test.FlowTestCase;
 
@@ -17,7 +18,7 @@ public class CacheableModelTest extends FlowTestCase {
 
         CacheableModel model = new CacheableModel();
 
-        ModelCache<CacheableModel, ?> modelCache = BaseCacheableModel.getCache((Class<CacheableModel>) model.getClass());
+        ModelCache<CacheableModel, ?> modelCache = FlowManager.getModelAdapter(CacheableModel.class).getModelCache();
         for (int i = 0; i < 100; i++) {
             model.name = "Test";
             model.save();
@@ -43,7 +44,7 @@ public class CacheableModelTest extends FlowTestCase {
 
         CacheableModel2 model = new CacheableModel2();
 
-        ModelCache<CacheableModel2, ?> modelCache = BaseCacheableModel.getCache((Class<CacheableModel2>) model.getClass());
+        ModelCache<CacheableModel2, ?> modelCache = FlowManager.getModelAdapter(CacheableModel2.class).getModelCache();
         for (int i = 0; i < 100; i++) {
             model.id = i;
             model.save();
@@ -68,7 +69,7 @@ public class CacheableModelTest extends FlowTestCase {
 
         CacheableModel3 cacheableModel3 = new CacheableModel3();
 
-        ModelCache<CacheableModel3, ?> modelCache = BaseCacheableModel.getCache(CacheableModel3.class);
+        ModelCache<CacheableModel3, ?> modelCache = FlowManager.getModelAdapter(CacheableModel3.class).getModelCache();
         for (int i = 0; i < 20; i++) {
             cacheableModel3.number = i;
             cacheableModel3.cache_id = "model" + i;
@@ -95,5 +96,33 @@ public class CacheableModelTest extends FlowTestCase {
                 .from(CacheableModel4.class)
                 .where(CacheableModel4_Table.id.eq(4))
                 .queryList();
+    }
+
+    public void testMultiplePrimaryKey() {
+        Delete.table(MultipleCacheableModel.class);
+
+        MultipleCacheableModel cacheableModel = new MultipleCacheableModel();
+        ModelAdapter<MultipleCacheableModel> modelAdapter = FlowManager.getModelAdapter(MultipleCacheableModel.class);
+        ModelCache<MultipleCacheableModel, ?> modelCache = modelAdapter.getModelCache();
+        Object[] values = new Object[modelAdapter.getCachingColumns().length];
+        for (int i = 0; i < 25; i++) {
+            cacheableModel.latitude = i;
+            cacheableModel.longitude = 25;
+            cacheableModel.save();
+
+            MultipleCacheableModel model = modelCache.get(MultipleCacheableModel.multiKeyCacheModel
+                    .getCachingKey(modelAdapter.getCachingColumnValuesFromModel(values, cacheableModel)));
+            assertNotNull(model);
+            assertEquals(cacheableModel, model);
+            assertEquals(SQLite.select().from(MultipleCacheableModel.class)
+                    .where(MultipleCacheableModel_Table.latitude.eq(cacheableModel.latitude))
+                    .and(MultipleCacheableModel_Table.longitude.eq(cacheableModel.longitude)).querySingle(), model);
+
+            model.delete();
+            assertNull(modelCache.get(MultipleCacheableModel.multiKeyCacheModel
+                    .getCachingKey(modelAdapter.getCachingColumnValuesFromModel(values, model))));
+        }
+
+        Delete.table(MultipleCacheableModel.class);
     }
 }

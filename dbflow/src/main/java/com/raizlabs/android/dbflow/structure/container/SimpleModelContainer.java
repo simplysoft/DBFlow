@@ -5,7 +5,8 @@ import android.support.annotation.NonNull;
 import com.raizlabs.android.dbflow.structure.Model;
 
 /**
- * Description:
+ * Description: Provides a simple implementation of most of the value conversion methods. This simplifies other
+ * model containers that use {@link #getValue(String)} as a retrieval and will coerce its values into proper types.
  */
 public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> extends BaseModelContainer<ModelClass, DataClass> {
 
@@ -26,8 +27,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Integer.valueOf((String) value);
-        } else {
+        } else if (value instanceof Integer) {
             return (Integer) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).intValue();
+        } else {
+            return null;
         }
     }
 
@@ -42,8 +47,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Long.valueOf((String) value);
-        } else {
+        } else if (value instanceof Long) {
             return (Long) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).longValue();
+        } else {
+            return null;
         }
     }
 
@@ -58,8 +67,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Boolean.valueOf((String) value);
-        } else {
+        } else if (value instanceof Boolean) {
             return (Boolean) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).byteValue() == 1;
+        } else {
+            return null;
         }
     }
 
@@ -79,8 +92,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Float.valueOf((String) value);
-        } else {
+        } else if (value instanceof Float) {
             return (Float) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).floatValue();
+        } else {
+            return null;
         }
     }
 
@@ -95,8 +112,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Double.valueOf((String) value);
-        } else {
+        } else if (value instanceof Double) {
             return (Double) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        } else {
+            return null;
         }
     }
 
@@ -121,8 +142,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Short.valueOf((String) value);
-        } else {
+        } else if (value instanceof Short) {
             return (Short) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).shortValue();
+        } else {
+            return null;
         }
     }
 
@@ -137,8 +162,12 @@ public abstract class SimpleModelContainer<ModelClass extends Model, DataClass> 
         Object value = getValue(key);
         if (value instanceof String) {
             return Byte.valueOf((String) value);
-        } else {
+        } else if (value instanceof Byte) {
             return (Byte) value;
+        } else if (value instanceof Number) {
+            return ((Number) value).byteValue();
+        } else {
+            return null;
         }
     }
 

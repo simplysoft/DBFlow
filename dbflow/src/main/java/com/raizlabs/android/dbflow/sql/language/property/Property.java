@@ -92,12 +92,12 @@ public class Property<T> extends BaseProperty<Property<T>> implements ITypeCondi
     }
 
     @Override
-    public Condition like(T value) {
+    public Condition like(String value) {
         return column(getNameAlias()).like(value);
     }
 
     @Override
-    public Condition glob(T value) {
+    public Condition glob(String value) {
         return column(getNameAlias()).glob(value);
     }
 

@@ -70,11 +70,11 @@ public class FloatProperty extends BaseProperty<FloatProperty> {
     }
 
     public Condition like(float value) {
-        return column(nameAlias).like(value);
+        return column(nameAlias).like(String.valueOf(value));
     }
 
     public Condition glob(float value) {
-        return column(nameAlias).glob(value);
+        return column(nameAlias).glob(String.valueOf(value));
     }
 
     public Condition greaterThan(float value) {

@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Description:
+ * Description: Allows {@link Table} to inherit fields from other objects to make it part of the DB table.
  */
 @Target(ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.SOURCE)

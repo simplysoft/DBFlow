@@ -3,6 +3,7 @@ package com.raizlabs.android.dbflow.processor.definition.method;
 import com.raizlabs.android.dbflow.processor.ClassNames;
 import com.raizlabs.android.dbflow.processor.definition.TableDefinition;
 import com.raizlabs.android.dbflow.processor.definition.column.ColumnDefinition;
+import com.raizlabs.android.dbflow.processor.definition.column.ContainerKeyDefinition;
 import com.raizlabs.android.dbflow.processor.utils.ModelUtils;
 import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.MethodSpec;
@@ -29,7 +30,12 @@ public class ToModelMethod implements MethodDefinition {
                 .addStatement("$T $L = new $T()", tableDefinition.elementClassName, ModelUtils.getVariable(false),
                         tableDefinition.elementClassName);
         for (ColumnDefinition columnDefinition : tableDefinition.getColumnDefinitions()) {
-            codeBuilder.add(columnDefinition.getToModelMethod());
+            if (!columnDefinition.excludeFromToModelMethod) {
+                codeBuilder.add(columnDefinition.getToModelMethod());
+            }
+        }
+        for (ContainerKeyDefinition containerKeyDefinition : tableDefinition.containerKeyDefinitions) {
+            codeBuilder.add(containerKeyDefinition.getToModelMethod());
         }
         codeBuilder.addStatement("return $L", ModelUtils.getVariable(false));
 
@@ -37,8 +43,8 @@ public class ToModelMethod implements MethodDefinition {
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addParameter(ParameterizedTypeName.get(ClassNames.MODEL_CONTAINER,
-                                tableDefinition.elementClassName, WildcardTypeName.get(tableDefinition.manager
-                                        .getTypeUtils().getWildcardType(null, null))),
+                        tableDefinition.elementClassName, WildcardTypeName.get(tableDefinition.manager
+                                .getTypeUtils().getWildcardType(null, null))),
                         ModelUtils.getVariable(true))
                 .addCode(codeBuilder.build())
                 .returns(tableDefinition.elementClassName).build();

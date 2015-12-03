@@ -51,6 +51,7 @@ public class ColumnDefinition extends BaseDefinition {
 
     public String containerKeyName;
     public boolean putContainerDefaultValue;
+    public boolean excludeFromToModelMethod;
 
     public boolean hasTypeConverter;
     public boolean isPrimaryKey;
@@ -75,32 +76,39 @@ public class ColumnDefinition extends BaseDefinition {
     public BaseColumnAccess columnAccess;
     public boolean hasCustomConverter;
 
-    public ColumnDefinition(ProcessorManager processorManager, Element element, BaseTableDefinition baseTableDefinition) {
+    public ColumnDefinition(ProcessorManager processorManager, Element element,
+                            BaseTableDefinition baseTableDefinition, boolean isPackagePrivate,
+                            Column column, PrimaryKey primaryKey) {
         super(element, processorManager);
-
-        column = element.getAnnotation(Column.class);
         if (column != null) {
             this.columnName = column.name().equals("") ? element.getSimpleName()
                     .toString() : column.name();
             length = column.length();
             collate = column.collate();
             defaultValue = column.defaultValue();
+            excludeFromToModelMethod = column.excludeFromToModelMethod();
         } else {
             this.columnName = element.getSimpleName()
                     .toString();
         }
 
-        boolean isPrivate = element.getModifiers()
-                .contains(Modifier.PRIVATE);
-        if (isPrivate) {
-            boolean useIs = elementTypeName.box().equals(TypeName.BOOLEAN.box())
-                    && (baseTableDefinition instanceof TableDefinition) && ((TableDefinition) baseTableDefinition).useIsForPrivateBooleans;
-            columnAccess = new PrivateColumnAccess(column, useIs);
+        if (isPackagePrivate) {
+            columnAccess = PackagePrivateAccess.from(processorManager, element, baseTableDefinition.databaseDefinition.classSeparator);
+
+            // register to ensure we only generate methods that are referenced by these columns.
+            PackagePrivateAccess.putElement(((PackagePrivateAccess) columnAccess).helperClassName, columnName);
         } else {
-            columnAccess = new SimpleColumnAccess();
+            boolean isPrivate = element.getModifiers()
+                    .contains(Modifier.PRIVATE);
+            if (isPrivate) {
+                boolean useIs = elementTypeName.box().equals(TypeName.BOOLEAN.box())
+                        && (baseTableDefinition instanceof TableDefinition) && ((TableDefinition) baseTableDefinition).useIsForPrivateBooleans;
+                columnAccess = new PrivateColumnAccess(column, useIs);
+            } else {
+                columnAccess = new SimpleColumnAccess();
+            }
         }
 
-        PrimaryKey primaryKey = element.getAnnotation(PrimaryKey.class);
         if (primaryKey != null) {
             if (primaryKey.autoincrement()) {
                 isPrimaryKeyAutoIncrement = true;
@@ -212,9 +220,21 @@ public class ColumnDefinition extends BaseDefinition {
         }
     }
 
+    public ColumnDefinition(ProcessorManager processorManager, Element element,
+                            BaseTableDefinition baseTableDefinition, boolean isPackagePrivate) {
+        this(processorManager, element, baseTableDefinition, isPackagePrivate,
+                element.getAnnotation(Column.class), element.getAnnotation(PrimaryKey.class));
+
+    }
+
     @Override
     protected ClassName getElementClassName(Element element) {
         return null;
+    }
+
+    @Override
+    public String toString() {
+        return QueryBuilder.quoteIfNeeded(columnName);
     }
 
     public void addPropertyDefinition(TypeSpec.Builder typeBuilder, TypeName tableClass) {
@@ -257,7 +277,8 @@ public class ColumnDefinition extends BaseDefinition {
                 elementTypeName, isModelContainerAdapter, columnAccess, ModelUtils.getVariable(isModelContainerAdapter), isPrimaryKeyAutoIncrement).build();
     }
 
-    public CodeBlock getLoadFromCursorMethod(boolean isModelContainerAdapter, boolean putNullForContainerAdapter) {
+    public CodeBlock getLoadFromCursorMethod(boolean isModelContainerAdapter, boolean putNullForContainerAdapter,
+                                             boolean endNonPrimitiveIf) {
         boolean putDefaultValue = putNullForContainerAdapter;
         if (putContainerDefaultValue != putDefaultValue && isModelContainerAdapter) {
             putDefaultValue = putContainerDefaultValue;
@@ -276,6 +297,11 @@ public class ColumnDefinition extends BaseDefinition {
     public CodeBlock getUpdateAutoIncrementMethod(boolean isModelContainerAdapter) {
         return DefinitionUtils.getUpdateAutoIncrementMethod(containerKeyName, elementName, elementTypeName,
                 isModelContainerAdapter, columnAccess).build();
+    }
+
+    public String setColumnAccessString(CodeBlock formattedAccess, boolean toModelMethod) {
+        return columnAccess.setColumnAccessString(elementTypeName, containerKeyName, elementName,
+                false, ModelUtils.getVariable(false), formattedAccess, toModelMethod);
     }
 
     public CodeBlock getToModelMethod() {

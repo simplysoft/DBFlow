@@ -3,12 +3,17 @@ DBFlow has undergone the most _significant_ changes in its lifetime in 3.0. This
 
 A significant portion of the changes include the _complete_ overhaul of the underlying annotation processor, leading to wonderful improvements in maintainability of the code, readability, and stability of the generated code. Now it uses the updated [JavaPoet](https://github.com/square/javapoet) vs the outdated JavaWriter. The changes in this library alone _significantly_ helps out the stability of the generated code.
 
+_note:_
+1. `update` no longer attempts to `insert` if it fails.
+2. Package private fields from other packages are now automatically accessible via generated `_Helper` classes. The referenced fields must be annotated with `@Column`, `@PrimaryKey`, or `@ForeignKey`. if its a legacy `ForeignKeyReference`, `referendFieldIsPackagePrivate()` must be set to true.
+3. `@Column` no longer required in conjunction with `@PrimaryKey` or `@ForeignKey`
+
 ## Table Of Contents
 1. Database + Table Structure
 2. Properties, Conditions, Queries, Replacement of ConditionQueryBuilder and more
 3. ModelContainers
 4. ModelViews
-5. Indexes
+5. Caching
 
 ## Database + Table Structure
 ### Database changes
@@ -131,7 +136,6 @@ public class IndexModel2 extends BaseModel {
 
     @Index(indexGroups = {1, 2, 3})
     @PrimaryKey
-    @Column
     int id;
 
     @Index(indexGroups = 1)
@@ -166,7 +170,7 @@ public final class IndexModel2_Table {
 ```
 
 ### Foreign Key Changes
-`@ForeignKey` fields no longer need to specify it's references!!! The old way still works, but is no longer necessary for `Model`-based ForeignKeys. The annotation processor takes the primary keys of the referenced table and generates a column with {fieldName}_{referencedColumnName} that represents the same SQLite Type of the field.<br>_Note: that is not backwards compatible_ with apps already with references.
+`@ForeignKey` fields no longer need to specify it's references or the `@Column` annotation!!! The old way still works, but is no longer necessary for `Model`-based ForeignKeys. The annotation processor takes the primary keys of the referenced table and generates a column with {fieldName}_{referencedColumnName} that represents the same SQLite Type of the field.<br>_Note: that is not backwards compatible_ with apps already with references.
 
 Going forward with new tables, you can leave them out.
 
@@ -198,7 +202,6 @@ Now:
 @Table(database = TestDatabase.class)
 public class ForeignInteractionModel extends TestModel1 {
 
-    @Column
     @ForeignKey(
             onDelete = ForeignKeyAction.CASCADE,
             onUpdate = ForeignKeyAction.CASCADE,
@@ -219,9 +222,18 @@ Properties replace `String` column names generated in the "$Table" classes. They
 
 Properties are represented by the interface `IProperty` which are subclassed into `Property<T>`, `Method`, and the primitive properties (`IntProperty`, `CharProperty`, etc).
 
+Properties can also be represented by values via the `PropertyFactory` class, enabling  values to appear first in queries:
+
+```java
+PropertyFactory.from(5l) // generates LongProperty
+PropertyFactory.from(5d) // generates DoubleProperty
+PropertyFactory.from("Hello") // generates Property<String>
+PropertyFactory.from(Date.class, someDate) // generates Property<Date>
+```
+
 It will become apparent why this change was necessary with some examples:
 
-A relatively simple query by SQLite standards:
+A non-simple query by SQLite standards:
 
 ```sql
 SELECT `name` AS `employee_name`, AVG(`salary`) AS `average_salary`, `order`, SUM(`salary`) as `sum_salary`
@@ -246,7 +258,7 @@ Now (with static import on `SomeTable_Table` and `Method` ):
 
 ```java
 List<SomeQueryTable> items =
-  new Select(name.as("employee_name"),
+  SQLite.select(name.as("employee_name"),
     avg(salary).as("average_salary"),
     order,
     sum(salary).as("sum_salary"))
@@ -262,4 +274,96 @@ ConditionQueryBuilder was fundamentally flawed. It represented a group of `Condi
 
 It has been replaced with the `ConditionGroup` class. This class represents an arbitrary group of `SQLCondition` in which it's sole purpose is to group together `SQLCondition`. Even better a `ConditionGroup` itself is a `SQLCondition`, meaning it can _nest_ inside of other `ConditionGroup` to allow complicated and insane queries.
 
-// INSERT EXAMPLE HERE
+Now you can take this:
+
+```sql
+SELECT FROM `SomeTable` WHERE 0 < `latitude` AND (`longitude` > 50 OR `longitude` < 25) AND `name`='MyHome'
+```
+
+and turn it into:
+
+```java
+SQLite.select()
+  .from(SomeTable.class)
+  .where(PropertyFactory.from(0).lessThan(SomeTable_Table.latitude))
+  .and(ConditionGroup.clause()
+    .and(SomeTable_Table.longitude.greaterThan(50))
+    .or(SomeTable_Table.longitude.lessThan(25)))
+  .and(SomeTable_Table.name.eq("MyHome"))
+```
+
+## ModelContainer Changes
+Now `ModelContainer` objects have a multitude of type-safe methods to ensure that they  can convert their contained object's data into the field they associate with. What  this means is that if our `Model` has a `long` field, while the data object for  the `ModelContainer` has a `Integer` object. Previously, we would get a classcastexception. Now what it does is "coerce" the value into the type you need.  Supported Types:
+1. Integer/int
+2. Double/Double
+3. Boolean/boolean
+4. Short/short
+5. Long/long
+6. Float/Float
+7. String
+8. Blob/byte[]/Byte[]
+9. Byte/byte
+10. Using TypeConverter to retrieve value safely.
+
+You can now `queryModelContainer` from the database to retrieve a single `Model` into `ModelContainer` format instead of into `Model` and then `ModelContainer`:
+
+```java
+
+JSONModel model = SQLite.select().from(SomeTable.class).where(SomeTable_Table.id.eq(5)).queryModelContainer(new JSONModel());
+JSONObject json = model.getData();
+// has data now
+```
+
+For the `toModel()` conversion/parse method from `ModelContainer` to `Model`, you can now:
+1. Have `@Column` excluded from it via `excludeFromToModelMethod()`
+2. include other fields in the method as well by adding the `@ContainerKey` annotation to them.
+
+## ModelView changes
+No longer do we need to specify the query for the `ModelView` in the annotation without ability to use the wrappper classes. We define a `@ModelViewQuery` field to use and then it simply becomes:
+
+```java
+@ModelViewQuery
+    public static final Query QUERY = new Select(AModel_Table.time)
+            .from(AModel.class).where(AModel_Table.time.greaterThan(0l));
+```
+
+What this means is that its easier than before to use Views.
+
+## Caching Changes
+I significantly revamped model caching in this release to make it easier, support more tables, and more consistent. Some of the significant changes:
+
+Previously you needed to extend `BaseCacheableModel` to enable model caching. No longer! The code that was there now generates in the corresponding `ModelAdapter` by setting `cachingEnabled = true` in the `@Table` annotation.
+
+Before
+
+```java
+@Table(databaseName = TestDatabase.NAME)
+public class CacheableModel extends BaseCacheableModel {
+
+    @Column
+    @PrimaryKey(autoincrement = true)
+    long id;
+
+    @Column
+    String name;
+
+    @Override
+    public int getCacheSize() {
+        return 1000;
+    }
+}
+```
+
+After:
+
+```java
+@Table(database = TestDatabase.class, cachingEnabled = true, cacheSize = 1000)
+public class CacheableModel extends BaseModel {
+
+    @PrimaryKey(autoincrement = true)
+    long id;
+
+    @Column
+    String name;
+}
+```

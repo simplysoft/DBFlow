@@ -1,11 +1,14 @@
 package com.raizlabs.android.dbflow.test.contentobserver;
 
 import android.net.Uri;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 import com.raizlabs.android.dbflow.config.FlowManager;
 import com.raizlabs.android.dbflow.runtime.FlowContentObserver;
 import com.raizlabs.android.dbflow.sql.SqlUtils;
 import com.raizlabs.android.dbflow.sql.language.Delete;
+import com.raizlabs.android.dbflow.sql.language.SQLCondition;
 import com.raizlabs.android.dbflow.structure.BaseModel;
 import com.raizlabs.android.dbflow.structure.Model;
 import com.raizlabs.android.dbflow.test.FlowTestCase;
@@ -46,7 +49,7 @@ public class ContentObserverTest extends FlowTestCase {
 
         FlowContentObserver.OnModelStateChangedListener onModelStateChangedListener = new FlowContentObserver.OnModelStateChangedListener() {
             @Override
-            public void onModelStateChanged(Class<? extends Model> table, BaseModel.Action action) {
+            public void onModelStateChanged(Class<? extends Model> table, BaseModel.Action action, @NonNull SQLCondition[] conditions) {
                 switch (action) {
                     case CHANGE:
                         for (int i = 0; i < methodCalls.length; i++) {
@@ -97,7 +100,7 @@ public class ContentObserverTest extends FlowTestCase {
         flowContentObserver.addModelChangeListener(onModelStateChangedListener);
 
         TestModel1 testModel1 = new TestModel1();
-        testModel1.name = "Name";
+        testModel1.setName("Name");
 
         testModel1.insert();
         testModel1.update();
@@ -147,7 +150,7 @@ public class ContentObserverTest extends FlowTestCase {
         final boolean[] methodcalled = new boolean[]{false, false, false, false};
         FlowContentObserver.OnModelStateChangedListener onModelStateChangedListener = new FlowContentObserver.OnModelStateChangedListener() {
             @Override
-            public void onModelStateChanged(Class<? extends Model> table, BaseModel.Action action) {
+            public void onModelStateChanged(@Nullable Class<? extends Model> table, BaseModel.Action action, @NonNull SQLCondition[] conditions) {
                 switch (action) {
                     case CHANGE:
                         for (int i = 0; i < methodCalls.length; i++) {
@@ -198,7 +201,7 @@ public class ContentObserverTest extends FlowTestCase {
         flowContentObserver.addModelChangeListener(onModelStateChangedListener);
 
         TestModel1 testModel1 = new TestModel1();
-        testModel1.name = "Name";
+        testModel1.setName("Name");
 
         flowContentObserver.beginTransaction();
 
